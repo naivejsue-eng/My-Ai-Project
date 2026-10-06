@@ -1,4 +1,4 @@
-name: Windows Ai Project
+name: Windows SSH
 
 on:
   workflow_dispatch:
@@ -30,24 +30,43 @@ jobs:
           $username = "gatau"
           $password = "gataujuga"
 
+          # Disable password complexity for this temporary runner
+          $cfg = "$env:TEMP\secpol.cfg"
+          $db = "$env:TEMP\secpol.sdb"
+
+          secedit /export /cfg $cfg | Out-Null
+
+          $policy = Get-Content $cfg
+          $policy = $policy -replace 'PasswordComplexity\s*=\s*\d+', 'PasswordComplexity = 0'
+          $policy = $policy -replace 'MinimumPasswordLength\s*=\s*\d+', 'MinimumPasswordLength = 1'
+          Set-Content $cfg $policy
+
+          secedit /configure /db $db /cfg $cfg /areas SECURITYPOLICY | Out-Null
+
+          Start-Sleep -Seconds 2
+
           $securePassword = ConvertTo-SecureString `
             $password `
             -AsPlainText `
             -Force
 
+          # Create user
           New-LocalUser `
             -Name $username `
             -Password $securePassword `
             -PasswordNeverExpires `
             -UserMayNotChangePassword
 
+          # Give Administrator access
           Add-LocalGroupMember `
             -Group "Administrators" `
             -Member $username
 
+          # Enable SSH server
           Set-Service sshd -StartupType Automatic
           Start-Service sshd
 
+          # Allow SSH through Windows Firewall
           New-NetFirewallRule `
             -Name "OpenSSH-Server-In-TCP" `
             -DisplayName "OpenSSH Server TCP 22" `
@@ -64,19 +83,27 @@ jobs:
           $ip = & $tailscale ip -4
 
           Write-Host ""
-          Write-Host "================================"
-          Write-Host " WINDOWS SSH READY"
-          Write-Host "================================"
+          Write-Host "=========================================="
+          Write-Host "        WINDOWS SSH READY"
+          Write-Host "=========================================="
           Write-Host "Tailscale IP : $ip"
           Write-Host "SSH Port     : 22"
           Write-Host "Username     : gatau"
           Write-Host "Password     : gataujuga"
-          Write-Host "================================"
+          Write-Host "Admin        : YES"
+          Write-Host "=========================================="
+          Write-Host ""
+          Write-Host "Termius:"
+          Write-Host "Host     = $ip"
+          Write-Host "Port     = 22"
+          Write-Host "Username = gatau"
+          Write-Host "Password = gataujuga"
           Write-Host ""
 
       - name: Keep Runner Alive
         shell: pwsh
         run: |
           while ($true) {
+            Write-Host "Windows runner aktif - $(Get-Date)"
             Start-Sleep -Seconds 60
           }
