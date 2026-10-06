@@ -1,0 +1,82 @@
+name: Windows Ai Project
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install Tailscale
+        shell: pwsh
+        run: |
+          winget install --id Tailscale.Tailscale `
+            --exact `
+            --silent `
+            --accept-package-agreements `
+            --accept-source-agreements
+
+      - name: Connect Tailscale
+        shell: pwsh
+        env:
+          TS_KEY: ${{ secrets.TS_KEY }}
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --auth-key="$env:TS_KEY"
+
+      - name: Setup SSH
+        shell: pwsh
+        run: |
+          $username = "gatau"
+          $password = "gataujuga"
+
+          $securePassword = ConvertTo-SecureString `
+            $password `
+            -AsPlainText `
+            -Force
+
+          New-LocalUser `
+            -Name $username `
+            -Password $securePassword `
+            -PasswordNeverExpires `
+            -UserMayNotChangePassword
+
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member $username
+
+          Set-Service sshd -StartupType Automatic
+          Start-Service sshd
+
+          New-NetFirewallRule `
+            -Name "OpenSSH-Server-In-TCP" `
+            -DisplayName "OpenSSH Server TCP 22" `
+            -Direction Inbound `
+            -Protocol TCP `
+            -LocalPort 22 `
+            -Action Allow `
+            -ErrorAction SilentlyContinue
+
+      - name: Show Connection Info
+        shell: pwsh
+        run: |
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          $ip = & $tailscale ip -4
+
+          Write-Host ""
+          Write-Host "================================"
+          Write-Host " WINDOWS SSH READY"
+          Write-Host "================================"
+          Write-Host "Tailscale IP : $ip"
+          Write-Host "SSH Port     : 22"
+          Write-Host "Username     : gatau"
+          Write-Host "Password     : gataujuga"
+          Write-Host "================================"
+          Write-Host ""
+
+      - name: Keep Runner Alive
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 60
+          }
